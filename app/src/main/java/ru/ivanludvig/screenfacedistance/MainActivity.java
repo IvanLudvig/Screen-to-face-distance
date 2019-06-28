@@ -3,15 +3,27 @@ package ru.ivanludvig.screenfacedistance;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.PointF;
 import android.hardware.Camera;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
+import android.os.Build;
 import android.os.Bundle;
+import android.util.DisplayMetrics;
 import android.util.Log;
+import android.util.SizeF;
+import android.util.TypedValue;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+
 import com.google.android.gms.vision.CameraSource;
 import com.google.android.gms.vision.Detector;
+import com.google.android.gms.vision.MultiProcessor;
 import com.google.android.gms.vision.Tracker;
 import com.google.android.gms.vision.face.Face;
 import com.google.android.gms.vision.face.FaceDetector;
@@ -25,7 +37,7 @@ public class MainActivity extends AppCompatActivity {
     TextView  textView;
     Context context;
     float F = 1f;           //focal length
-    float sensorX, sensorY; //camera sensor parameters
+    float sensorX, sensorY; //camera sensor dimensions
     float angleX, angleY;
 
     @Override
@@ -49,6 +61,7 @@ public class MainActivity extends AppCompatActivity {
             camera.release();
             textView = findViewById(R.id.text);
             createCameraSource();
+
         }
 
     }
@@ -130,7 +143,7 @@ public class MainActivity extends AppCompatActivity {
 
             showStatus("focal length: "+F+
                     "\nsensor width: "+sensorX
-                    +"\ndistance: "+String.format("%.1f",d+"mm"));
+                    +"\nd: "+String.format("%.0f",d)+"mm");
         }
 
         @Override
