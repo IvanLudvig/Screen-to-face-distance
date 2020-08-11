@@ -5,37 +5,36 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.PointF;
 import android.hardware.Camera;
-import android.hardware.camera2.CameraAccessException;
-import android.hardware.camera2.CameraCharacteristics;
-import android.hardware.camera2.CameraManager;
-import android.os.Build;
 import android.os.Bundle;
-import android.util.DisplayMetrics;
 import android.util.Log;
-import android.util.SizeF;
-import android.util.TypedValue;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
 import com.google.android.gms.vision.CameraSource;
 import com.google.android.gms.vision.Detector;
-import com.google.android.gms.vision.MultiProcessor;
 import com.google.android.gms.vision.Tracker;
 import com.google.android.gms.vision.face.Face;
 import com.google.android.gms.vision.face.FaceDetector;
-import com.google.android.gms.vision.face.Landmark;
 import com.google.android.gms.vision.face.LargestFaceFocusingProcessor;
 
 import java.io.IOException;
 
 public class MainActivity extends AppCompatActivity {
 
-    TextView  textView;
+    static final int IMAGE_WIDTH = 1024;
+    static final int IMAGE_HEIGHT = 1024;
+
+    static final int RIGHT_EYE = 0;
+    static final int LEFT_EYE = 1;
+
+    static final int AVERAGE_EYE_DISTANCE = 63; // in mm
+
+    TextView textView;
     Context context;
+
     float F = 1f;           //focal length
     float sensorX, sensorY; //camera sensor dimensions
     float angleX, angleY;
@@ -48,20 +47,18 @@ public class MainActivity extends AppCompatActivity {
         if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 1);
             Toast.makeText(this, "Grant Permission and restart app", Toast.LENGTH_SHORT).show();
-        }
-        else {
+        } else {
             Camera camera = frontCam();
             Camera.Parameters campar = camera.getParameters();
             F = campar.getFocalLength();
             angleX = campar.getHorizontalViewAngle();
             angleY = campar.getVerticalViewAngle();
-            sensorX = (float) (Math.tan(Math.toRadians(angleX/2))*2*F);
-            sensorY = (float) (Math.tan(Math.toRadians(angleY/2))*2*F);
+            sensorX = (float) (Math.tan(Math.toRadians(angleX / 2)) * 2 * F);
+            sensorY = (float) (Math.tan(Math.toRadians(angleY / 2)) * 2 * F);
             camera.stopPreview();
             camera.release();
             textView = findViewById(R.id.text);
             createCameraSource();
-
         }
 
     }
@@ -74,7 +71,7 @@ public class MainActivity extends AppCompatActivity {
         cameraCount = Camera.getNumberOfCameras();
         for (int camIdx = 0; camIdx < cameraCount; camIdx++) {
             Camera.getCameraInfo(camIdx, cameraInfo);
-            Log.v("CAMID", camIdx+"");
+            Log.v("CAMID", camIdx + "");
             if (cameraInfo.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
                 try {
                     cam = Camera.open(camIdx);
@@ -98,10 +95,10 @@ public class MainActivity extends AppCompatActivity {
         detector.setProcessor(new LargestFaceFocusingProcessor(detector, new FaceTracker()));
 
         CameraSource cameraSource = new CameraSource.Builder(this, detector)
-                .setRequestedPreviewSize(1024, 768)
                 .setFacing(CameraSource.CAMERA_FACING_FRONT)
                 .setRequestedFps(30.0f)
                 .build();
+        System.out.println(cameraSource.getPreviewSize());
 
         try {
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
@@ -115,12 +112,20 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
             cameraSource.start();
-        }
-        catch (IOException e) {
+        } catch (IOException e) {
             e.printStackTrace();
         }
 
 
+    }
+
+    public void showStatus(final String message) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                textView.setText(message);
+            }
+        });
     }
 
     private class FaceTracker extends Tracker<Face> {
@@ -132,18 +137,20 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onUpdate(Detector.Detections<Face> detections, Face face) {
-            float p =(float) Math.sqrt(
-                    (Math.pow((face.getLandmarks().get(Landmark.LEFT_EYE).getPosition().x-
-                            face.getLandmarks().get(Landmark.RIGHT_EYE).getPosition().x), 2)+
-                            Math.pow((face.getLandmarks().get(Landmark.LEFT_EYE).getPosition().y-
-                                    face.getLandmarks().get(Landmark.RIGHT_EYE).getPosition().y), 2)));
+            PointF leftEyePos = face.getLandmarks().get(LEFT_EYE).getPosition();
+            PointF rightEyePos = face.getLandmarks().get(RIGHT_EYE).getPosition();
 
-            float H = 63;
-            float d = F*(H/sensorX)*(768/(2*p));
+            float deltaX = Math.abs(leftEyePos.x - rightEyePos.x);
+            float deltaY = Math.abs(leftEyePos.y - rightEyePos.y);
 
-            showStatus("focal length: "+F+
-                    "\nsensor width: "+sensorX
-                    +"\nd: "+String.format("%.0f",d)+"mm");
+            float distance;
+            if (deltaX >= deltaY) {
+                distance = F * (AVERAGE_EYE_DISTANCE / sensorX) * (IMAGE_WIDTH / deltaX);
+            } else {
+                distance = F * (AVERAGE_EYE_DISTANCE / sensorY) * (IMAGE_HEIGHT / deltaY);
+            }
+
+            showStatus("distance: " + String.format("%.0f", distance) + "mm");
         }
 
         @Override
@@ -156,16 +163,6 @@ public class MainActivity extends AppCompatActivity {
         public void onDone() {
             super.onDone();
         }
-    }
-
-
-    public void showStatus(final String message) {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                textView.setText(message);
-            }
-        });
     }
 
 }
